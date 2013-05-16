@@ -93,8 +93,10 @@ void start_worker(int listenfd)
                 snprintf(content, MAXLEN, "Client : %s\n", inet_ntop(AF_INET, &clilen, buf, clilen));
                 //syslog(LOG_INFO, content);
 
+                setnonblocking(connfd);
+
                 ev.data.fd = connfd;
-                ev.events = EPOLLIN;
+                ev.events = EPOLLIN | EPOLLET;
 
                 if(epoll_ctl(efd, EPOLL_CTL_ADD, connfd, &ev) < 0)
                     FATAL("WORKER.EPOLL_CTL");
@@ -214,4 +216,11 @@ int get_fileinfo(char *filename)
         return 0;
     else
         return -1;
+}
+
+int setnonblocking(int fd)
+{
+    if((fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK)) < 0)
+        return -1;
+    return 0;
 }

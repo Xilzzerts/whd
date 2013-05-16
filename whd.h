@@ -13,5 +13,5 @@ void parse_uri(char *, char *, char *);
 void get_filetype(char *, char *);
 void process_rstheader(rio_t *);
 int  get_fileinfo(char *);
-
+int setnonblocking(int);
 #endif
