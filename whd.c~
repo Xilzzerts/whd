@@ -6,7 +6,6 @@ pthread_mutex_t ALOCK = PTHREAD_MUTEX_INITIALIZER;
 
 void fake_main(void)
 {
-    signal(SIGPIPE, SIG_IGN);
     int listenfd, err, i;
     pid_t pid;//, contact[WORKER];
     struct sockaddr_in servaddr;
@@ -46,16 +45,8 @@ void start_worker(int listenfd)
     struct sockaddr_in cliaddr;
     struct epoll_event ev, events[MAXLEN];
     socklen_t clilen;
-    int connfd, efd, nfds, n;
+    int connfd, efd, nfds, err, n;
     char buf[MAXLEN], content[MAXLEN];
-    char *rstline = (char *)malloc(MAXLEN);
-    char *method = (char *)malloc(MAXLEN);
-    char *uri = (char *)malloc(MAXLEN);
-    char *protocol = (char *)malloc(MAXLEN);
-    char *filename = (char *)malloc(MAXLEN);
-    char *filetype = (char *)malloc(MAXLEN);
-    char *response = (char *)malloc(MAXLEN);
-
 
     if((efd = epoll_create(MAXLEN)) < 0)
         FATAL("WORKER.EPOLL_CREATE");
@@ -101,23 +92,19 @@ void start_worker(int listenfd)
             }
             else
             {
-                process(events[n].data.fd, efd, rstline, method, uri, protocol, filename, filetype, response);              
+                process(events[n].data.fd, efd);              
             }
         }
     }
-    free(rstline);
-    free(method);
-    free(uri);
-    free(protocol);
-    free(filename);
-    free(filetype);
-    free(response);
 }
 
 
 
-void process(int fd, int efd, char *rstline, char *method, char *uri, char *protocol, char *filename, char *filetype, char *response)
+void process(int fd, int efd)
 {
+    char rstline[MAXLEN], method[MAXLEN], uri[MAXLEN], protocol[MAXLEN];
+    char filename[MAXLEN], filetype[MAXLEN];
+    char response[MAXLEN];
     rio_t rio;
     int err;
     struct stat sbuf;
@@ -128,7 +115,6 @@ void process(int fd, int efd, char *rstline, char *method, char *uri, char *prot
     {
         if((err = epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL)) < 0)
             FATAL("PROCESS.EPOLL_CTL");
-        close(fd);
     }
     else
     {
@@ -147,13 +133,11 @@ void process(int fd, int efd, char *rstline, char *method, char *uri, char *prot
             lstat(filename, &sbuf);
             err = open(filename, O_RDONLY, 0);
             file = mmap(0 ,sbuf.st_size, PROT_READ, MAP_PRIVATE, err, 0);
-            close(err);
             sprintf(response, "HTTP/1.1 200 OK\r\n");
             sprintf(response, "%sContent-length: %lu\r\n", response, sbuf.st_size);
             sprintf(response, "%sContent-type: %s\r\n\r\n", response, filetype);
             rio_writen(fd, response, strlen(response));
             rio_writen(fd, file, sbuf.st_size);
-            munmap(file, sbuf.st_size);
         }
     }
 }
@@ -161,7 +145,7 @@ void process(int fd, int efd, char *rstline, char *method, char *uri, char *prot
 void ERR(int fd, int efd)
 {
     char re[] = "HTTP/1.1 403 Not Found\r\nContent-length: 14\r\nContent-type: text/html\r\n\r\n<p>ILLEGAL</p>";
-    rio_writen(fd, re, strlen(re));
+    rio_writen(fd, re, 14);
     if(epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL) < 0)
         FATAL("ERR.EPOLL_CTL");
     close(fd);
@@ -170,7 +154,7 @@ void ERR(int fd, int efd)
 void call_403(int fd)
 {
     char re[] = "HTTP/1.1 403 Not Found\r\nContent-length: 16\r\nContent-type: text/html\r\n\r\n<p>NOT FOUND</p>";
-    rio_writen(fd, re, strlen(re));
+    rio_writen(fd, re, 16);
 }
 
 void parse_uri(char *uri, char *filename, char *filetype)
